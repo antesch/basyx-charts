@@ -2,6 +2,27 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
   "definitions": {
+    "schemaWait": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "expectedVersion": { "type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+            "tag": { "type": ["string", "number"] },
+            "digest": { "type": "string" }
+          }
+        },
+        "intervalSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "connectTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "resources": { "$ref": "#/definitions/resourceRequirements" }
+      }
+    },
     "labelSelectorRequirement": {
       "type": "object",
       "additionalProperties": false,
@@ -752,6 +773,7 @@
     "serviceRuntimeOverrides": {
       "type": "object",
       "properties": {
+        "waitForSchema": { "$ref": "#/definitions/schemaWait" },
         "general": { "$ref": "#/properties/general" },
         "server": { "$ref": "#/properties/server" },
         "history": { "$ref": "#/properties/history" },
@@ -2015,6 +2037,7 @@
       "type": "object",
       "required": ["clusterName", "type", "instances", "storage", "reader"],
       "properties": {
+        "waitForSchema": { "$ref": "#/definitions/schemaWait" },
         "clusterName": {
           "type": "string",
           "minLength": 1

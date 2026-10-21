@@ -341,6 +341,22 @@ helm diff upgrade basyx charts/basyx \
   -f values/values.example.yaml
 ```
 
+### Upgrading to chart 3.17.0
+
+On first installation the Configuration Service now runs as a regular Job,
+and Go backend pods wait in an init container until their writer database has
+the expected clean schema. This supports `helm install --wait --wait-for-jobs`
+without waiting for a `post-install` migration hook. Upgrades retain the
+`pre-upgrade` migration hook. Configuration Job names include the release
+revision so completed Job pod templates never need to be modified in place.
+
+The default `database.waitForSchema.expectedVersion: v1.2.3` matches BaSyx Go
+1.1.2. When overriding backend images, set the schema version expected by
+those images through `database.waitForSchema.expectedVersion` or
+`<service>.waitForSchema.expectedVersion`. This is a database schema version,
+not the image version. Set `database.waitForSchema.enabled: false` globally,
+or `<service>.waitForSchema.enabled: false` for a specific backend, to opt out.
+
 ### Upgrading to chart 3.16.1
 
 Chart 3.16.1 updates the default BaSyx Go backend and Configuration Service
@@ -1188,11 +1204,13 @@ configurationService:
   hook:
     enabled: true
     events:
-      - post-install
       - pre-upgrade
 ```
 
-`pre-upgrade` runs schema migrations before updated runtime pods are rolled out. `post-install` is used for fresh installs because the PostgreSQL database must exist before the job can connect.
+On first installation this is a regular Job, created alongside the database
+and its prerequisites. `pre-upgrade` runs schema migrations before updated
+runtime pods are rolled out. Hook events apply only to upgrades. Disabling
+`configurationService.hook.enabled` makes upgrades use regular Jobs as well.
 
 When the chart is deployed by Argo CD, enable the optional Argo CD sync annotations. Argo CD uses `helm template` and maps Helm hooks into its own sync phases, so the chart can explicitly run the Configuration Service as a `Sync` hook in wave `10` and the runtime Deployments in wave `20`. This lets Argo CD recreate prerequisites such as the ServiceAccount, database resources, and generated PostgreSQL Secret before starting the schema job, while still keeping runtime pods behind the migration. These annotations are disabled by default and are not needed for plain Helm installations.
 
@@ -1211,13 +1229,32 @@ configurationService:
         - BeforeHookCreation
 ```
 
-On fresh installs, PostgreSQL may need some time before it accepts connections. The chart therefore adds a `wait-for-database` init container that polls PostgreSQL with `pg_isready` before starting the Configuration Service. This avoids slow Kubernetes Job backoff loops when the database is simply not ready yet.
+On fresh installs, PostgreSQL may need some time before it accepts connections.
+The Configuration Service's `wait-for-database` init container polls PostgreSQL
+with `pg_isready`. Separately, every Go backend has a `wait-for-schema` init
+container that checks its effective writer connection for the expected
+`basyxsystem.schema_version` and `state=clean`. Intermediate clean migration
+versions do not unblock it. The Web UI and Keycloak are not schema-gated.
+
+The schema wait uses the backend's database Secret, PostgreSQL connection
+options, and certificate volume mounts. It needs no Kubernetes API access.
+Connection attempts and SQL statements are bounded by
+`database.waitForSchema.connectTimeoutSeconds` (default 5 seconds), retries by
+`intervalSeconds` (5), and the wait by `timeoutSeconds` (900). A timeout reports
+an init-container failure; the application container has not started.
+Allow a sufficient Helm `--timeout`, for example `--timeout 20m`, for database
+provisioning and migration. Init-container retries may continue after a Helm
+timeout; inspect the Configuration Service Job and schema-wait logs.
+
+When the Configuration Service is disabled, the wait still checks databases
+initialized externally. Per-service `waitForSchema` settings override the
+global defaults; independently configured databases must be migrated separately.
 
 After deployment, verify the job and logs with:
 
 ```bash
-kubectl -n basyx-custom get job basyx-configuration
-kubectl -n basyx-custom logs job/basyx-configuration
+kubectl -n basyx-custom get jobs -l app.kubernetes.io/component=configuration-service
+kubectl -n basyx-custom logs job/basyx-configuration-1
 ```
 
 The successful database state is stored in the `basyxsystem` table with `state=clean`.

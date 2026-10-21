@@ -384,10 +384,9 @@ configurationService:
     resources: {}
   hook:
     enabled: true
-    # post-install is needed because the CNPG database is created by this chart.
-    # pre-upgrade runs migrations before new runtime pods start.
+    # A regular Job initializes the database on installation. Upgrade hooks
+    # run migrations before updated runtime pods start. Argo CD uses Sync waves.
     events:
-      - post-install
       - pre-upgrade
     weight: "-10"
     deletePolicy:
@@ -2221,6 +2220,22 @@ basyxStudio:
 
 
 database:
+  # Wait before starting a Go backend until its writer database has the exact
+  # schema expected by that runtime image. BaSyx Go 1.1.2 expects v1.2.3.
+  # Override expectedVersion when changing backend images to another schema.
+  # Each backend can override these settings through <service>.waitForSchema.
+  waitForSchema:
+    enabled: true
+    expectedVersion: v1.2.3
+    image:
+      repository: ghcr.io/cloudnative-pg/postgresql
+      pullPolicy: IfNotPresent
+      tag: "18.4-system-trixie"
+      digest: ""
+    intervalSeconds: 5
+    timeoutSeconds: 900
+    connectTimeoutSeconds: 5
+    resources: {}
   clusterName: basyx-database
   # postgres, managed and cnpg deploy a CloudNativePG cluster. Use external to
   # connect BaSyx Go to an existing PostgreSQL database through existingSecret.

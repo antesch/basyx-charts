@@ -646,6 +646,7 @@ spec:
       securityContext:
         {{- toYaml $values.podSecurityContext | nindent 8 }}
 
+      {{- include "basyx.database.waitForSchema" . | nindent 6 }}
       containers:
         - name: {{ .containerName }}
           securityContext:

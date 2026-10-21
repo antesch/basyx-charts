@@ -1,0 +1,16 @@
+# Exercise first-install schema gating with a real backend during ct install.
+tls:
+  enabled: false
+
+database:
+  instances: 1
+  storage:
+    size: 1Gi
+
+aasEnvironment:
+  enabled: true
+  ingress:
+    enabled: false
+
+abac:
+  enabled: false

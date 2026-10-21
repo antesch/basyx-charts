@@ -1,0 +1,180 @@
+suite: database startup ordering
+release:
+  name: basyx
+templates:
+  - templates/aas-repository/deployment.yaml
+  - templates/aas-environment/deployment.yaml
+  - templates/aas-web-gui/deployment.yaml
+  - templates/aas-web-gui/configmap.yaml
+  - templates/aas-web-gui/configmap-infrastructure.yaml
+  - templates/aas-web-gui/configmap-logos.yaml
+  - templates/aas-web-gui/secret.yaml
+tests:
+  - it: waits for the exact schema before starting a backend
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-schema
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: ghcr.io/cloudnative-pg/postgresql:18.4-system-trixie
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: EXPECTED_SCHEMA_VERSION
+            value: v1.2.3
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: basyx-database-app
+                key: password
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: 'EXPECTED_SCHEMA_VERSION.*clean'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: 'FROM basyxsystem ORDER BY identifier'
+
+  - it: permits disabling the wait globally
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+      database.waitForSchema.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: permits disabling the wait only for an externally managed service
+    template: templates/aas-environment/deployment.yaml
+    set:
+      aasEnvironment.enabled: true
+      aasEnvironment.waitForSchema.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: applies per-service schema and resource overrides without losing defaults
+    template: templates/aas-environment/deployment.yaml
+    set:
+      aasEnvironment.enabled: true
+      aasEnvironment.waitForSchema.expectedVersion: v2.0.0
+      aasEnvironment.waitForSchema.resources.requests.memory: 32Mi
+      aasEnvironment.waitForSchema.timeoutSeconds: 60
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: EXPECTED_SCHEMA_VERSION
+            value: v2.0.0
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: SCHEMA_WAIT_TIMEOUT_SECONDS
+            value: "60"
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.requests.memory
+          value: 32Mi
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: ghcr.io/cloudnative-pg/postgresql:18.4-system-trixie
+
+  - it: follows the effective per-service database credentials and mounts
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+      aasRepository.database.existingSecret: external-repository-db
+      aasRepository.volumeMounts:
+        - name: client-certificates
+          mountPath: /postgres-tls
+          readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_HOST
+            valueFrom:
+              secretKeyRef:
+                name: external-repository-db
+                key: host
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: client-certificates
+            mountPath: /postgres-tls
+            readOnly: true
+
+  - it: follows the runtime pooler connection
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+      database.pooler.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: basyx-database-rw-pooler
+
+  - it: respects raw PostgreSQL environment overrides
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+      aasRepository.environment.POSTGRES_HOST: custom-postgres
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: custom-postgres
+
+  - it: supports explicitly enabling a per-service wait when disabled globally
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+      database.waitForSchema.enabled: false
+      aasRepository.waitForSchema.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-schema
+
+  - it: keeps the wait for an independently initialized database
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+      configurationService.enabled: false
+    asserts:
+      - exists:
+          path: spec.template.spec.initContainers
+
+  - it: does not add a PostgreSQL dependency to the Web UI
+    template: templates/aas-web-gui/deployment.yaml
+    set:
+      aasWebGui.enabled: true
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: rejects an invalid expected schema version
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+      database.waitForSchema.expectedVersion: latest
+    asserts:
+      - failedTemplate:
+          errorPattern: expectedVersion
+
+  - it: rejects a zero polling interval
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+      database.waitForSchema.intervalSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: intervalSeconds

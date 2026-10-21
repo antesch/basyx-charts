@@ -10,6 +10,23 @@ Run the chart tests with:
 helm unittest .
 ```
 
+From the repository root, test the schema-wait shell script with:
+
+```bash
+sh .github/scripts/test-schema-wait.sh
+```
+
+`ci/startup-values.yaml` enables a real AAS Environment backend during
+chart-testing installs. To reproduce a fresh startup test in an isolated
+namespace on a cluster with CloudNativePG and cert-manager installed:
+
+```bash
+helm install startup charts/basyx \
+  --namespace basyx-startup-test --create-namespace \
+  --values charts/basyx/ci/startup-values.yaml \
+  --wait --wait-for-jobs --timeout 20m
+```
+
 The suites cover stable chart contracts such as:
 
 - default ABAC config and derived trust list
@@ -26,6 +43,7 @@ The suites cover stable chart contracts such as:
 - runtime `helm test` hook for custom CA mount checks
 - service account helper behavior
 - digest-aware image rendering
+- schema-gated backend startup, per-service overrides, and install/upgrade Job lifecycle
 - schema validation for required values and basic formats
 - managed PostgreSQL storage, WAL, resources, scheduling and parameters
 - optional CloudNativePG read-write and read-only Pooler rendering, reader routing, and monitoring
