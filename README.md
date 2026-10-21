@@ -341,38 +341,6 @@ helm diff upgrade basyx charts/basyx \
   -f values/values.example.yaml
 ```
 
-### Automated AAS Web UI updates
-
-The `Update AAS Web UI` GitHub Actions workflow checks daily at 06:23 UTC and
-can also be run manually with `workflow_dispatch`. It runs only in
-`eclipse-basyx/charts`; forks do not create update PRs automatically.
-
-Eligible releases are published, non-draft, non-prerelease GitHub releases from
-`eclipse-basyx/basyx-aas-web-ui` with a valid `v<major>-YYMMDD` tag, a newer date,
-and the same major version as `aasWebGui.image.tag`. A major-version change
-requires a manual update. The newest eligible release must have a published
-`eclipsebasyx/aas-gui` Docker Hub manifest; otherwise the next run checks again.
-Registry errors and rate limits fail the run rather than silently skipping it.
-
-The workflow updates the image tag, increments the current chart patch version,
-and prepends an upgrade note. After Helm linting and all chart unit tests pass,
-it creates or refreshes one review-ready PR on `automation/aas-web-ui`. Each run
-starts from `main`, so an open PR does not accumulate patch-version bumps.
-The workflow does not merge or deploy the update.
-
-Maintainers must enable **Allow GitHub Actions to create and approve pull
-requests** under the repository's **Settings > Actions > General > Workflow
-permissions**. The workflow uses `GITHUB_TOKEN` with `contents: write` and
-`pull-requests: write`; no additional secret is required. GitHub may require a
-maintainer to approve the PR-triggered CI run. Helm validation also runs inside
-the updater before it creates or updates the PR.
-
-The updater's offline tests can be run with:
-
-```bash
-python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
-```
-
 ### Upgrading to chart 3.16.1
 
 Chart 3.16.1 updates the default BaSyx Go backend and Configuration Service
