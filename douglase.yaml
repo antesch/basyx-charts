@@ -1,0 +1,83 @@
+# Isolated startup test on douglasie-rke in namespace basyx-test.
+# Deploy this file on its own, without additional example values.
+instanceName: douglasie-test
+fullnameOverride: basyx-test
+host: basyx-test.example.invalid
+
+argocd:
+  enabled: false
+
+tls:
+  enabled: false
+
+# The chart always renders an Issuer. Use a namespaced self-signed Issuer
+# instead of referring to a CA Secret from another installation.
+internal:
+  certificateIssuer:
+    name: basyx-test-issuer
+    autocreateCa: false
+    spec:
+      ca: null
+      selfSigned: {}
+
+database:
+  type: postgres
+  clusterName: basyx-test-database
+  instances: 1
+  storage:
+    size: 1Gi
+    storageClass: trident-nas
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  waitForSchema:
+    enabled: true
+    expectedVersion: v1.2.3
+    timeoutSeconds: 900
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
+configurationService:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 1Gi
+  waitForDatabase:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
+aasEnvironment:
+  enabled: true
+  ingress:
+    enabled: false
+  httpRoute:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 1Gi
+
+aasWebGui:
+  enabled: false
+
+keycloak:
+  enabled: false
+
+abac:
+  enabled: false
