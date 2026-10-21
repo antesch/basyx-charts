@@ -1,5 +1,5 @@
 {{- if .Values.configurationService.enabled -}}
-{{- $hookAnnotations := .Values.configurationService.hook.annotations | default dict -}}
+{{- $hookAnnotations := ternary (.Values.configurationService.hook.annotations | default dict) (dict) .Values.configurationService.hook.enabled -}}
 {{- $argoHook := and .Values.configurationService.hook.enabled .Values.argocd.enabled .Values.configurationService.hook.argocd.enabled -}}
 {{- $helmHook := and .Values.configurationService.hook.enabled .Release.IsUpgrade (not $argoHook) -}}
 apiVersion: batch/v1

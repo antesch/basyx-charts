@@ -27,6 +27,20 @@ helm install startup charts/basyx \
   --wait --wait-for-jobs --timeout 20m
 ```
 
+For upgrades from chart 3.16.1, `fixtures/legacy-upgrade.yaml` supplies values
+without the new schema-wait block. Test these paths in separate disposable
+namespaces after the old release and backend are healthy:
+
+- Upgrade with the same values file: the new chart defaults enable schema waiting.
+- Upgrade with `--reuse-values`: old defaults are retained and schema waiting
+  stays disabled when its configuration is absent.
+- Upgrade with `--reset-then-reuse-values`: the new defaults are merged with
+  existing user overrides and schema waiting is enabled.
+
+Check that the database/PVC and test data survive and that the upgraded
+backend is healthy. Bootstrap the old chart without `--wait`, because its
+`post-install` migration hook can otherwise block initial backend readiness.
+
 The suites cover stable chart contracts such as:
 
 - default ABAC config and derived trust list

@@ -1,0 +1,42 @@
+# Existing values used unchanged for 3.16.1 -> current chart upgrade tests.
+# Deliberately contains no database.waitForSchema configuration.
+fullnameOverride: compat
+tls:
+  enabled: false
+internal:
+  certificateIssuer:
+    name: compat-issuer
+    spec:
+      ca: null
+      selfSigned: {}
+database:
+  clusterName: compat-db
+  instances: 1
+  storage:
+    size: 1Gi
+    storageClass: trident-nas
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+configurationService:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 1Gi
+aasEnvironment:
+  enabled: true
+  ingress:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 1Gi
+abac:
+  enabled: false

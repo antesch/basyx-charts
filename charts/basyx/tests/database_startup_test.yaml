@@ -50,6 +50,99 @@ tests:
       - notExists:
           path: spec.template.spec.initContainers
 
+  - it: preserves legacy startup when reused values lack the schema wait block
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+      database.waitForSchema: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+      - exists:
+          path: spec.template.spec.containers[0]
+
+  - it: permits an empty schema wait block in legacy values
+    template: templates/aas-repository/deployment.yaml
+    set:
+      aasRepository.enabled: true
+      database.waitForSchema: null
+      aasRepository.waitForSchema: {}
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: does not implicitly gate an older custom runtime image when reusing legacy defaults
+    template: templates/aas-environment/deployment.yaml
+    set:
+      aasEnvironment.enabled: true
+      aasEnvironment.image.tag: 1.0.11
+      database.waitForSchema: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: eclipsebasyx/aasenvironment-go:1.0.11
+
+  - it: permits explicitly disabling a local wait when global defaults are absent
+    template: templates/aas-environment/deployment.yaml
+    set:
+      aasEnvironment.enabled: true
+      database.waitForSchema: null
+      aasEnvironment.waitForSchema.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: gives an actionable error when enabling a legacy wait without new defaults
+    template: templates/aas-environment/deployment.yaml
+    set:
+      aasEnvironment.enabled: true
+      database.waitForSchema: null
+      aasEnvironment.waitForSchema.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: 'expectedVersion.*reset-then-reuse-values'
+
+  - it: reports the missing image rather than failing on a nil image map
+    template: templates/aas-environment/deployment.yaml
+    set:
+      aasEnvironment.enabled: true
+      database.waitForSchema: null
+      aasEnvironment.waitForSchema.enabled: true
+      aasEnvironment.waitForSchema.expectedVersion: v1.2.3
+    asserts:
+      - failedTemplate:
+          errorPattern: 'waitForSchema.image.*reset-then-reuse-values'
+
+  - it: accepts complete per-service settings when reused global defaults are absent
+    template: templates/aas-environment/deployment.yaml
+    set:
+      aasEnvironment.enabled: true
+      database.waitForSchema: null
+      aasEnvironment.waitForSchema:
+        enabled: true
+        expectedVersion: v1.2.3
+        image:
+          repository: ghcr.io/cloudnative-pg/postgresql
+          tag: 18.4-system-trixie
+          pullPolicy: IfNotPresent
+        intervalSeconds: 5
+        timeoutSeconds: 900
+        connectTimeoutSeconds: 5
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: ghcr.io/cloudnative-pg/postgresql:18.4-system-trixie
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: EXPECTED_SCHEMA_VERSION
+            value: v1.2.3
+      - equal:
+          path: spec.template.spec.initContainers[0].resources
+          value: {}
+
   - it: permits disabling the wait only for an externally managed service
     template: templates/aas-environment/deployment.yaml
     set:

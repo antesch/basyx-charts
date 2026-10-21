@@ -2,8 +2,16 @@
 {{- define "basyx.database.waitForSchema" -}}
 {{- $root := .root -}}
 {{- $values := index $root.Values .component -}}
-{{- $wait := mergeOverwrite (deepCopy $root.Values.database.waitForSchema) ($values.waitForSchema | default dict) -}}
+{{- $globalWait := $root.Values.database.waitForSchema | default dict -}}
+{{- $wait := mergeOverwrite (deepCopy $globalWait) ($values.waitForSchema | default dict) -}}
 {{- if $wait.enabled }}
+{{- $expectedVersion := required "waitForSchema.expectedVersion must be set when enabled; use --reset-then-reuse-values to merge new chart defaults on upgrades" $wait.expectedVersion -}}
+{{- range $key := list "image" "intervalSeconds" "timeoutSeconds" "connectTimeoutSeconds" -}}
+{{- $_ := required (printf "waitForSchema.%s must be set when enabled; use --reset-then-reuse-values to merge new chart defaults on upgrades" $key) (get $wait $key) -}}
+{{- end -}}
+{{- range $key := list "repository" "pullPolicy" -}}
+{{- $_ := required (printf "waitForSchema.image.%s must be set when enabled" $key) (get $wait.image $key) -}}
+{{- end -}}
 initContainers:
   - name: wait-for-schema
     image: {{ include "basyx.image" (dict "root" $root "image" $wait.image) | quote }}
@@ -24,7 +32,7 @@ initContainers:
       {{- end }}
       {{- end }}
       - name: EXPECTED_SCHEMA_VERSION
-        value: {{ required "database.waitForSchema.expectedVersion must not be empty" $wait.expectedVersion | quote }}
+        value: {{ $expectedVersion | quote }}
       - name: SCHEMA_WAIT_TIMEOUT_SECONDS
         value: {{ $wait.timeoutSeconds | quote }}
       - name: SCHEMA_WAIT_INTERVAL_SECONDS
@@ -32,7 +40,7 @@ initContainers:
       - name: SCHEMA_CONNECT_TIMEOUT_SECONDS
         value: {{ $wait.connectTimeoutSeconds | quote }}
     resources:
-      {{- toYaml $wait.resources | nindent 6 }}
+      {{- toYaml ($wait.resources | default dict) | nindent 6 }}
     volumeMounts:
       {{- with $values.volumeMounts }}
       {{- toYaml . | nindent 6 }}

@@ -143,3 +143,16 @@ tests:
           value: basyx-configuration-3
       - notExists:
           path: metadata.annotations["helm.sh/hook"]
+
+  - it: ignores custom hook annotations when hooks are disabled as in older charts
+    release:
+      upgrade: true
+      revision: 2
+    set:
+      configurationService.hook.enabled: false
+      configurationService.hook.annotations:
+        helm.sh/hook: post-install
+        argocd.argoproj.io/hook: PostSync
+    asserts:
+      - notExists:
+          path: metadata.annotations

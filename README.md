@@ -357,6 +357,15 @@ those images through `database.waitForSchema.expectedVersion` or
 not the image version. Set `database.waitForSchema.enabled: false` globally,
 or `<service>.waitForSchema.enabled: false` for a specific backend, to opt out.
 
+With `helm upgrade --reuse-values`, Helm retains the previous chart's defaults.
+If those values do not contain `database.waitForSchema`, backend startup stays
+ungated rather than failing to render or implicitly selecting a schema for an
+older custom image. To adopt the new defaults while retaining existing user
+overrides, use `--reset-then-reuse-values`, or supply your values file during
+the upgrade without `--reuse-values`. Check `expectedVersion` when using custom
+runtime images. Existing monitoring/scripts referencing the Configuration Job
+by its old name must be updated for the revision-specific Job names.
+
 ### Upgrading to chart 3.16.1
 
 Chart 3.16.1 updates the default BaSyx Go backend and Configuration Service
