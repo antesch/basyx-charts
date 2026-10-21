@@ -1,0 +1,80 @@
+name: Update AAS Web UI
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: update-aas-web-ui
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.repository == 'eclipse-basyx/charts' && !github.event.repository.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: '3.13.7'
+
+      - name: Test updater
+        run: python -m unittest discover -s .github/scripts -p 'test_*.py' -v
+
+      - name: Prepare update if a newer release and image exist
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/update_aas_web_ui.py
+
+      - name: Set up Helm
+        if: steps.update.outputs.changed == 'true'
+        uses: azure/setup-helm@v4.3.0
+        with:
+          version: v3.17.0
+
+      - name: Install helm-unittest
+        if: steps.update.outputs.changed == 'true'
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v0.8.0
+
+      - name: Validate updated chart
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          helm lint charts/basyx --strict
+          helm unittest charts/basyx
+
+      # Creation happens after validation, so every ready PR has passed these checks.
+      - name: Create or update Web UI PR
+        if: steps.update.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automation/aas-web-ui
+          base: main
+          add-paths: |
+            charts/basyx/values.yaml
+            charts/basyx/Chart.yaml
+            README.md
+          commit-message: 'chore(deps): update AAS Web UI to ${{ steps.update.outputs.tag }}'
+          title: 'chore(deps): update AAS Web UI to ${{ steps.update.outputs.tag }}'
+          body: |
+            Updates the default AAS Web UI image from `${{ steps.update.outputs.previous-tag }}` to `${{ steps.update.outputs.tag }}`.
+
+            - Release: https://github.com/eclipse-basyx/basyx-aas-web-ui/releases/tag/${{ steps.update.outputs.tag }}
+            - Verified Docker Hub manifest for `eclipsebasyx/aas-gui:${{ steps.update.outputs.tag }}`.
+            - Bumps the chart patch version to `${{ steps.update.outputs.chart-version }}` and adds an upgrade note.
+            - Validation passed: `helm lint charts/basyx --strict` and `helm unittest charts/basyx`.
+
+            Ready for maintainer review. Merging and deployment require a separate action.
+          draft: false
